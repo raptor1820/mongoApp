@@ -3,46 +3,100 @@ const app = express();
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const userModel = require("./models/usermodel.js");
+const User = require("./models/usermodel.js");
+const parser = require("body-parser");
+const validator = require("validator");
+const cookieParser = require("cookie-parser");
+const { response } = require("express");
 require("dotenv").config();
-
 require("./config/connect.js").connect();
+
+app.use(parser.json());
+app.use(cookieParser());
+app.use(
+  parser.urlencoded({
+    extended: true,
+  })
+);
 app.use(express.json());
-app.use("view engine", "ejs");
+app.set("view engine", "ejs");
+
 app.get("/", (req, res) => {
-  res.send("<h1>Hello from backend</h1>");
+  res.render("index.ejs");
 });
 
 app.post("/signup", async (req, res) => {
+  // console.log(req.body);
   try {
     var { name, password, email } = req.body;
     if (!email || !password || !name) {
-      res.status(400).send("<h1>Enter all information</h1>");
+      console.log("empty");
+      res.render("error.ejs");
     }
-    const exisingUser = await userModel.findOne({ email });
+    const exisingUser = await User.findOne({ email });
     if (exisingUser) {
-      res.status(400).send("<h1>User already exists</h1>");
+      console.log("exists");
+      res.render("error.ejs");
+    }
+    if (!validator.isEmail(email)) {
+      console.log("invalid email");
+      res.render("error.ejs");
     }
     var encrypted_pwd = await bcrypt.hash(password, 10);
 
-    const user = await userModel.create({
+    const user = await User.create({
       name,
-      password: encrypted_pwd,
       email: email.toLowerCase(),
+      password: encrypted_pwd,
     });
 
-    var token = jwt.sign({ UID: user._id }, process.env.secret, {
-      expireIn: "2h",
+    const token = jwt.sign({ user_id: user._id, email }, process.env.secret, {
+      expiresIn: "2h",
     });
 
     user.token = token;
 
-    res.send(200).json(user);
+    res.render("success.ejs", {
+      token: user.token,
+      name: user.name,
+      email: user.email,
+    });
   } catch {
     (error) => {
       console.log(error);
     };
   }
+});
+
+app.get("/login", (req, res) => {
+  res.render("login.ejs");
+});
+
+app.post("/logger", async (req, res) => {
+  var { email, password } = req.body;
+  if (!email || !password) {
+    console.log("empty email/password");
+    res.render("error.ejs");
+  }
+  if (!validator.isEmail(email)) {
+    conosle.log("invalid email");
+    res.render("error.ejs");
+  }
+  const user = await User.findOne({ email });
+  if (!user) {
+    console.log("does not exist");
+    res.render("error.ejs");
+  }
+  const correctPassword = await bcrypt.compare(password, user.password);
+  const token = jwt.sign(
+    { user_id: user._id, email: user.email },
+    process.env.secret,
+    { expiresIn: "2h" }
+  );
+  user.token = token;
+  res.cookie("logged", token, { httpOnly: true, maxAge: 60 });
+
+  res.json({ test: "working" });
 });
 
 app.listen(3000, (error) => {
