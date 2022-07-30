@@ -7,7 +7,8 @@ const User = require("./models/usermodel.js");
 const parser = require("body-parser");
 const validator = require("validator");
 const cookieParser = require("cookie-parser");
-const { response } = require("express");
+
+const auth = require("./middleware/auth");
 require("dotenv").config();
 require("./config/connect.js").connect();
 
@@ -56,11 +57,7 @@ app.post("/signup", async (req, res) => {
 
     user.token = token;
 
-    res.render("success.ejs", {
-      token: user.token,
-      name: user.name,
-      email: user.email,
-    });
+    res.redirect("/login");
   } catch {
     (error) => {
       console.log(error);
@@ -94,9 +91,17 @@ app.post("/logger", async (req, res) => {
     { expiresIn: "2h" }
   );
   user.token = token;
-  res.cookie("logged", token, { httpOnly: true, maxAge: 60 });
+  res.cookie("logged", token, { httpOnly: true, expire: 600000 });
 
-  res.json({ test: "working" });
+  res.redirect("/dashboard");
+});
+
+app.get("/dashboard", auth, (req, res) => {
+  if (!req.user) {
+    res.send("not authorized");
+  }
+
+  res.send("working");
 });
 
 app.listen(3000, (error) => {
